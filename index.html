@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>원과 부채꼴 짝 맞추기</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #ffffff;
+    --ink: #1f2430;
+    --muted: #6b7280;
+    --line: #d9d4c7;
+    --back: #2f4b7c;
+    --back2: #3d5f99;
+    --q: #e8efff;
+    --q-ink: #2f4b7c;
+    --a: #fff3dd;
+    --a-ink: #9a5b00;
+    --hl: #e4572e;
+    --fill: rgba(228, 87, 46, .28);
+    --ok: #2a9d6f;
+    --bad: #d64545;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink);
+    font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.5rem; margin: 8px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: .95rem; }
+
+  /* 시작/결과 화면 */
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px; max-width: 560px; margin: 24px auto;
+  }
+  .panel h2 { margin-top: 0; }
+  .rules { padding-left: 1.2em; line-height: 1.7; }
+  .rules b { color: var(--hl); }
+  .row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  input[type=text] {
+    flex: 1; min-width: 160px; font-size: 1.05rem; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  button {
+    font: inherit; font-size: 1.05rem; padding: 10px 18px; border-radius: 10px;
+    border: 0; background: var(--back); color: #fff; cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--back); border: 1px solid var(--back); }
+  button:disabled { opacity: .5; cursor: default; }
+
+  /* 상단 바 */
+  .hud {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 12px;
+  }
+  .hud .stat { font-size: .9rem; color: var(--muted); }
+  .hud .stat b { display: block; font-size: 1.35rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .hud .spacer { flex: 1; }
+  .lockbar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+  .lockbar i { display: block; height: 100%; width: 0; background: var(--ok); }
+  .lockbar.bad i { background: var(--bad); }
+
+  /* 카드 */
+  .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: min(720px, calc((100vh - 290px) * 1.25 + 30px)); margin: 0 auto; }
+  .card { perspective: 900px; aspect-ratio: 5 / 4; cursor: pointer; user-select: none; }
+  .card .in {
+    position: relative; width: 100%; height: 100%;
+    transition: transform .35s; transform-style: preserve-3d;
+  }
+  .card.open .in, .card.done .in { transform: rotateY(180deg); }
+  .face {
+    position: absolute; inset: 0; border-radius: 12px; backface-visibility: hidden;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 6px; text-align: center; overflow: hidden;
+  }
+  .back {
+    background: repeating-linear-gradient(45deg, var(--back), var(--back) 10px, var(--back2) 10px, var(--back2) 20px);
+    border: 3px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.15);
+  }
+  .back svg { width: 42%; opacity: .9; }
+  .front { transform: rotateY(180deg); border: 2px solid var(--line); }
+  .front.q { background: var(--q); color: var(--q-ink); }
+  .front.a { background: var(--a); color: var(--a-ink); }
+  .tag {
+    position: absolute; top: 5px; left: 7px; font-size: .68rem; font-weight: 700;
+    opacity: .75; letter-spacing: .02em;
+  }
+  .txt { font-size: clamp(.72rem, 1.9vw, 1rem); line-height: 1.35; font-weight: 600; color: var(--ink); }
+  .big { white-space: nowrap; font-size: clamp(1rem, 3.6vw, 1.9rem); font-weight: 800; color: var(--ink); }
+  .fig { height: 84%; width: auto; margin-top: 12px; }
+  .fig + .txt { margin-top: 2px; }
+  .front.x { background: #f1ecff; color: #5b3fa6; }
+  .emoji { font-size: clamp(1.6rem, 4.5vw, 2.6rem); line-height: 1; }
+  .item-name { font-size: clamp(.75rem, 1.6vw, .95rem); font-weight: 700; margin-top: 4px; }
+  .toast {
+    position: fixed; left: 50%; top: 18px; transform: translate(-50%, -20px);
+    padding: 10px 18px; border-radius: 999px; font-weight: 800; font-size: 1.1rem;
+    color: #fff; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 10;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.bad { background: var(--bad); }
+  .card.done .front { border-color: var(--ok); opacity: .55; }
+  .card.done { cursor: default; }
+  .card.wrong .front { border-color: var(--bad); box-shadow: 0 0 0 3px rgba(214,69,69,.35); }
+  .card.right .front { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(42,157,111,.35); }
+  .board.locked .card { cursor: not-allowed; }
+  .frac { display: inline-flex; flex-direction: column; vertical-align: middle; font-size: .85em; line-height: 1.05; margin: 0 1px; }
+  .frac span:first-child { border-bottom: 1px solid currentColor; }
+
+  /* 랭킹 */
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+  tr.me td { background: var(--a); font-weight: 700; }
+  .result-time { font-size: 2.4rem; font-weight: 800; margin: 4px 0; }
+  .hidden { display: none !important; }
+
+  @media (max-width: 560px) {
+    .board { gap: 6px; }
+    .card { aspect-ratio: 1 / 1; }
+    .big { font-size: 1rem; }
+    .tag { font-size: .58rem; }
+    .fig { height: 86%; margin-top: 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>원과 부채꼴 짝 맞추기</h1>
+  <p class="sub">중1 2학기 Ⅴ-3. 원과 부채꼴 · 개인전 스피드 게임</p>
+
+  <!-- 시작 화면 -->
+  <section id="start" class="panel">
+    <h2>게임 방법</h2>
+    <ul class="rules">
+      <li>뒤집힌 카드 16장 중 두 장을 골라 <b>그림 카드</b>와 <b>이름 카드</b>의 짝을 찾아요.</li>
+      <li>짝은 반드시 <b>그림-이름</b>이어야 해요. 그림-그림, 이름-이름은 오답이에요.</li>
+      <li>용어: 호, 현, 활꼴, 부채꼴, 중심각, 반지름, 할선</li>
+      <li>짝이 맞으면 <b>0.5초</b> 뒤, 틀리면 <b>2.5초</b> 뒤에 다음 카드를 고를 수 있어요.</li>
+      <li>💣 <b>폭탄</b>은 한 장만 뒤집어도 <b>5초</b> 동안 멈추고, 다시 덮여요. 폭탄 위치를 기억하세요!</li>
+      <li>용어 7쌍을 모두 찾으면 끝나요. 시간이 가장 짧은 사람이 이겨요.</li>
+    </ul>
+    <div class="row">
+      <input id="name" type="text" maxlength="12" placeholder="이름 (예: 3번 김민수)">
+      <button id="startBtn">시작</button>
+    </div>
+    <div id="rankStart"></div>
+  </section>
+
+  <!-- 게임 화면 -->
+  <section id="game" class="hidden">
+    <div class="hud">
+      <div class="stat">시간<b id="time">0.0초</b></div>
+      <div class="stat">맞춘 짝<b id="pairs">0 / 7</b></div>
+      <div class="stat">오답<b id="miss">0</b></div>
+      <div class="spacer"></div>
+      <button class="ghost" id="quitBtn">처음으로</button>
+    </div>
+    <div class="lockbar" id="lockbar"><i></i></div>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <!-- 결과 화면 -->
+  <section id="result" class="panel hidden">
+    <h2 id="resultTitle">완료!</h2>
+    <div class="result-time" id="resultTime"></div>
+    <div id="resultInfo" class="sub"></div>
+    <div class="row">
+      <button id="againBtn">다시 하기</button>
+      <button class="ghost" id="homeBtn">처음으로</button>
+    </div>
+    <div id="rankResult"></div>
+  </section>
+</div>
+
+<script>
+// ---------- 그림(SVG) ----------
+const C = 50, R = 36;
+const pt = (deg, r = R) => [C + r * Math.cos(deg * Math.PI / 180), C - r * Math.sin(deg * Math.PI / 180)];
+const f = n => n.toFixed(1);
+
+// 용어 카드 그림: 원 위의 두 점 A, B와 강조할 부분
+function termFig(kind) {
+  const a0 = 20, a1 = 125;
+  const [ax, ay] = pt(a0), [bx, by] = pt(a1);
+  const hl = 'stroke="#e4572e" stroke-width="3.2" fill="none" stroke-linecap="round"';
+  let extra = '';
+  if (kind === 'arc') extra = `<path d="M${f(ax)} ${f(ay)} A${R} ${R} 0 0 0 ${f(bx)} ${f(by)}" ${hl}/>`;
+  if (kind === 'chord') extra = `<line x1="${f(ax)}" y1="${f(ay)}" x2="${f(bx)}" y2="${f(by)}" ${hl}/>`;
+  if (kind === 'secant') {
+    const dx = bx - ax, dy = by - ay;
+    extra = `<line x1="${f(ax - dx * .45)}" y1="${f(ay - dy * .45)}" x2="${f(bx + dx * .45)}" y2="${f(by + dy * .45)}" ${hl}/>`;
+  }
+  if (kind === 'sector') extra = `<path d="M${C} ${C} L${f(ax)} ${f(ay)} A${R} ${R} 0 0 0 ${f(bx)} ${f(by)} Z" fill="rgba(228,87,46,.3)" stroke="#e4572e" stroke-width="2"/>`;
+  if (kind === 'segment') extra = `<path d="M${f(ax)} ${f(ay)} A${R} ${R} 0 0 0 ${f(bx)} ${f(by)} Z" fill="rgba(228,87,46,.3)" stroke="#e4572e" stroke-width="2"/>`;
+  if (kind === 'radius') extra = `<line x1="${C}" y1="${C}" x2="${f(ax)}" y2="${f(ay)}" ${hl}/>`;
+  if (kind === 'angle') {
+    const [p0x, p0y] = pt(a0, 10), [p1x, p1y] = pt(a1, 10);
+    extra = `<line x1="${C}" y1="${C}" x2="${f(ax)}" y2="${f(ay)}" stroke="#1f2430" stroke-width="1.2"/>
+      <line x1="${C}" y1="${C}" x2="${f(bx)}" y2="${f(by)}" stroke="#1f2430" stroke-width="1.2"/>
+      <path d="M${C} ${C} L${f(p0x)} ${f(p0y)} A10 10 0 0 0 ${f(p1x)} ${f(p1y)} Z" fill="rgba(228,87,46,.45)" stroke="#e4572e" stroke-width="1.5"/>`;
+  }
+  const [tax, tay] = pt(a0, R + 7), [tbx, tby] = pt(a1, R + 7);
+  const [ox, oy] = pt((a0 + a1) / 2 + 180, 8);
+  return `<svg class="fig" viewBox="0 0 100 100" aria-hidden="true">
+    <circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#2f4b7c" stroke-width="1.4"/>
+    ${extra}
+    <circle cx="${C}" cy="${C}" r="1.6" fill="#1f2430"/>
+    <text x="${f(ox)}" y="${f(oy + 3)}" font-size="8" text-anchor="middle" fill="#1f2430">O</text>
+    <circle cx="${f(ax)}" cy="${f(ay)}" r="1.6" fill="#1f2430"/><circle cx="${f(bx)}" cy="${f(by)}" r="1.6" fill="#1f2430"/>
+    <text x="${f(tax)}" y="${f(tay + 3)}" font-size="8" text-anchor="middle" fill="#1f2430">A</text>
+    <text x="${f(tbx)}" y="${f(tby + 3)}" font-size="8" text-anchor="middle" fill="#1f2430">B</text>
+  </svg>`;
+}
+
+// ---------- 카드 (지도서 Ⅴ-3, 부채꼴과 활꼴의 뜻) ----------
+// 용어마다 그림 카드 1장 + 이름 카드 1장. 같은 용어의 그림과 이름이면 짝
+const TERMS = [
+  { kind: 'arc', name: '호' },
+  { kind: 'chord', name: '현' },
+  { kind: 'segment', name: '활꼴' },
+  { kind: 'sector', name: '부채꼴' },
+  { kind: 'angle', name: '중심각' },
+  { kind: 'radius', name: '반지름' },
+  { kind: 'secant', name: '할선' },
+];
+
+// 폭탄 카드 2장: 한 장만 뒤집어도 5초 대기 후 다시 덮인다. 용어 짝만 다 찾으면 게임이 끝난다
+const BOMB = 'bomb';
+const ITEM_COUNT = 2;
+
+const PAIRS = TERMS.length;
+const LOCK_RIGHT = 500, LOCK_WRONG = 2500, LOCK_BOMB = 5000;
+const RANK_KEY = 'sector-match-rank-v3';
+
+const shuffle = arr => {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
+// ---------- 게임 상태 ----------
+const $ = id => document.getElementById(id);
+let state;
+
+function show(id) {
+  for (const s of ['start', 'game', 'result']) $(s).classList.toggle('hidden', s !== id);
+}
+
+const backSvg = `<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="none" stroke="#fff" stroke-width="5"/><path d="M50 50 L90 50 A40 40 0 0 0 50 10 Z" fill="#fff"/></svg>`;
+
+function startGame() {
+  const name = $('name').value.trim() || '이름 없음';
+  const cards = [];
+  TERMS.forEach((t, id) => {
+    cards.push({ id, side: 'q', html: termFig(t.kind) });
+    cards.push({ id, side: 'a', html: `<div class="big">${t.name}</div>` });
+  });
+  for (let k = 0; k < ITEM_COUNT; k++) {
+    cards.push({ id: BOMB, side: 'x', html: `<div class="emoji">💣</div><div class="item-name">폭탄</div>` });
+  }
+  shuffle(cards);
+
+  state = { name, cards, open: [], matched: 0, miss: 0, bombs: 0, locked: false, t0: performance.now(), timer: null, over: false };
+
+  const board = $('board');
+  board.innerHTML = '';
+  board.classList.remove('locked');
+  cards.forEach((c, i) => {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `<div class="in">
+      <div class="face back">${backSvg}</div>
+      <div class="face front ${c.side}">${c.side === 'x' ? '' : `<span class="tag">${c.side === 'q' ? '그림' : '이름'}</span>`}${c.html}</div>
+    </div>`;
+    el.addEventListener('click', () => flip(i));
+    c.el = el;
+    board.appendChild(el);
+  });
+  $('pairs').textContent = `0 / ${PAIRS}`;
+  $('miss').textContent = '0';
+  setLockbar(0, false);
+  $('toast').className = 'toast';
+  show('game');
+  state.timer = setInterval(tick, 100);
+  tick();
+}
+
+function elapsed() { return Math.max(0, (performance.now() - state.t0) / 1000); }
+function tick() { $('time').textContent = elapsed().toFixed(1) + '초'; }
+
+function flip(i) {
+  const s = state, c = s.cards[i];
+  if (s.over || s.locked || c.done || s.open.includes(c)) return;
+  c.el.classList.add('open');
+  s.open.push(c);
+
+  // 폭탄은 한 장만 뒤집어도 5초 동안 멈춘다. 그 뒤 열린 카드는 모두 다시 덮인다
+  if (c.id === BOMB) {
+    s.bombs++;
+    toast(`💣 폭탄! ${LOCK_BOMB / 1000}초 동안 멈춤`, 'bad');
+    const opened = s.open;
+    for (const k of opened) k.el.classList.add('wrong');
+    return lock(LOCK_BOMB, false, () => {
+      for (const k of opened) k.el.classList.remove('wrong', 'open');
+      s.open = [];
+    });
+  }
+
+  if (s.open.length < 2) return;
+  const [x, y] = s.open;
+  const ok = x.id === y.id && x.side !== y.side;
+  for (const k of s.open) k.el.classList.add(ok ? 'right' : 'wrong');
+  if (ok) { s.matched++; x.done = y.done = true; } else { s.miss++; }
+  $('pairs').textContent = `${s.matched} / ${PAIRS}`;
+  $('miss').textContent = s.miss;
+
+  if (ok && s.matched === PAIRS) {
+    for (const k of s.open) { k.el.classList.remove('right'); k.el.classList.add('done'); }
+    s.open = [];
+    return finish();
+  }
+  lock(ok ? LOCK_RIGHT : LOCK_WRONG, ok, () => {
+    for (const k of [x, y]) {
+      k.el.classList.remove('right', 'wrong');
+      if (ok) k.el.classList.add('done'); else k.el.classList.remove('open');
+    }
+    s.open = [];
+  });
+}
+
+function toast(msg, kind) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = `toast show ${kind}`;
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => { el.className = 'toast'; }, 1800);
+}
+
+// 다음 카드를 고를 수 없는 대기 시간
+function lock(ms, ok, done) {
+  const s = state;
+  s.locked = true;
+  $('board').classList.add('locked');
+  setLockbar(1, !ok);
+  const bar = $('lockbar').firstElementChild;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    bar.style.transition = `width ${ms}ms linear`;
+    bar.style.width = '0%';
+  }));
+  setTimeout(() => {
+    if (s !== state) return;
+    done();
+    s.locked = false;
+    $('board').classList.remove('locked');
+  }, ms);
+}
+
+function setLockbar(frac, bad) {
+  const bar = $('lockbar').firstElementChild;
+  bar.style.transition = 'none';
+  bar.style.width = (frac * 100) + '%';
+  $('lockbar').classList.toggle('bad', bad);
+}
+
+// ---------- 결과와 랭킹 ----------
+function loadRank() {
+  try { return JSON.parse(localStorage.getItem(RANK_KEY)) || []; } catch { return []; }
+}
+function saveRank(list) {
+  try { localStorage.setItem(RANK_KEY, JSON.stringify(list)); } catch {}
+}
+
+function rankTable(list, meAt) {
+  if (!list.length) return '';
+  const esc = s => s.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  return `<h3>이 기기 TOP 10</h3><table>
+    <tr><th>순위</th><th>이름</th><th>시간</th><th>오답</th></tr>
+    ${list.slice(0, 10).map((r, i) => `<tr class="${r.at === meAt ? 'me' : ''}">
+      <td>${i + 1}</td><td>${esc(r.name)}</td><td>${r.time.toFixed(1)}초</td><td>${r.miss}</td></tr>`).join('')}
+  </table>`;
+}
+
+function finish() {
+  const s = state;
+  s.over = true;
+  clearInterval(s.timer);
+  const time = elapsed();
+  tick();
+  const at = Date.now();
+  const list = loadRank();
+  list.push({ name: s.name, time, miss: s.miss, at });
+  list.sort((a, b) => a.time - b.time);
+  saveRank(list.slice(0, 50));
+
+  const place = list.findIndex(r => r.at === at) + 1;
+  setTimeout(() => {
+    $('resultTitle').textContent = `${s.name}, 완료!`;
+    $('resultTime').textContent = time.toFixed(1) + '초';
+    $('resultInfo').textContent = `오답 ${s.miss}번 · 폭탄 ${s.bombs}번 · 이 기기 ${place}위`;
+    $('rankResult').innerHTML = rankTable(list, at);
+    show('result');
+  }, 700);
+}
+
+function goHome() {
+  if (state) { clearInterval(state.timer); state.over = true; }
+  $('rankStart').innerHTML = rankTable(loadRank());
+  show('start');
+}
+
+$('startBtn').addEventListener('click', startGame);
+$('name').addEventListener('keydown', e => { if (e.key === 'Enter') startGame(); });
+$('againBtn').addEventListener('click', startGame);
+$('homeBtn').addEventListener('click', goHome);
+$('quitBtn').addEventListener('click', goHome);
+goHome();
+</script>
+</body>
+</html>
